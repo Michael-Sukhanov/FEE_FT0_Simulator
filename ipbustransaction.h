@@ -28,7 +28,7 @@ public:
 
     void show_transaction();
 
-    IPbusTransaction& getResponse(FEE &detector_regMap, quint16& itterator_request, quint16 itterator_response);
+    IPbusTransaction& getResponse(FEE &detector_regMap, quint16& itterator_request, quint16 itterator_response, bool& containErrors);
     static bool HeaderisValid(TransactionHeader header){
         return header.TypeID < 6              &&
                header.ProtocolVersion == 0x2  &&
@@ -47,6 +47,7 @@ private:
 
 
     bool initTransactionSize();
+    quint16 whereIsProhibited(FEE& rm,quint32 address, quint16 contentSize);
 };
 
 

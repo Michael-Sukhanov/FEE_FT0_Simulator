@@ -72,9 +72,9 @@ quint16 IPbusPacket::getPacketSize(){return this->packet_size;}
 
 IPbusPacket& IPbusPacket::PrepareControlResponse(FEE &targetmap){
         quint8 transaction_counter = 0;
+        quint16 words_n_in_response = 1, words_n_in_request = 1;
         IPbus_word handled_body_without_header[max_words_per_packet];
-        quint16 words_n_in_response = 1;
-        quint16 words_n_in_request = 1;
+        bool containErrors;
         handled_body_without_header[0] = this->packet_header;
         while(words_n_in_request < this->packet_size){
             if(!IPbusTransaction::HeaderisValid(this->body[words_n_in_request])){
@@ -84,11 +84,13 @@ IPbusPacket& IPbusPacket::PrepareControlResponse(FEE &targetmap){
             }
             IPbusTransaction RequestTransaction(&this->body[words_n_in_request], this->output);
             ++transaction_counter;
-            IPbusTransaction &ResponseTransaction = RequestTransaction.getResponse(targetmap, words_n_in_request, words_n_in_response);
+            IPbusTransaction &ResponseTransaction = RequestTransaction.getResponse(targetmap, words_n_in_request, words_n_in_response, containErrors);
                 for(quint16 k = 0; k < ResponseTransaction.getTransactionSize(); ++k){
                     handled_body_without_header[words_n_in_response] = ResponseTransaction.getTransactionInIPbusWords()[k];
                     ++words_n_in_response;
             }
+                ResponseTransaction.show_transaction();
+                if(containErrors) break;//interruping packet handle
         }
         IPbusPacket *response = new IPbusPacket(handled_body_without_header, words_n_in_response, this->output);
         if(!LittleEndian)

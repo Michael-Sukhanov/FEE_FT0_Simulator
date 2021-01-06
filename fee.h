@@ -20,6 +20,7 @@ public:
     quint32 read_word(quint16 address);
     bool registerIsAvailable(quint16 address);
     quint32 getavailablePM(){return availPMs;}
+    quint64 addressSpaceSize(){return sizeof(T0_Map);}
 
 public slots:
     void ChangeAvailablePMs(quint8 PMno){availPMs ^= (1 << PMno); /*qDebug() << QString::asprintf("0x%08X", availPMs);*/};
