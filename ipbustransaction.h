@@ -47,7 +47,6 @@ private:
 
 
     bool initTransactionSize();
-    quint16 whereIsProhibited(FEE& rm,quint32 address, quint16 contentSize);
 };
 
 

@@ -4,23 +4,27 @@
 #include <QObject>
 #include "RegisterMap.h"
 #include "auxiliary/mrand.h"
+#include "log.h"
 
 const quint32 TCM_mean_T = 0xEB, PM_mean_T = 397, TCM_FPGA_mean_T = 40186, PM_FPGA_mean_T = 40382,
-              FPGA1V_mean = 21739, FPGA1_8V_mean = 39130;
+              FPGA1V_mean = 21739, FPGA1_8V_mean = 39130; 
 
 class FEE:public QObject
 {
     Q_OBJECT
 public:
     FEE();
-    quint32 getValue(quint16 address);
-    bool isFIFO(quint16 address);
+    bool isFIFO(quint32 address);
+    bool isReadOnly(quint32 address);
+    bool isHalfed(quint32 address);
+    bool registerIsAvailable(quint32 address);
+    bool registerExists(quint32 address);
 
-    void    write_word(quint32 data, quint16 address);
-    quint32 read_word(quint16 address);
-    bool registerIsAvailable(quint16 address);
+    bool getValue(quint16 address, quint32& target, Log* log = nullptr, TransactionType type = read);
+    bool writeWord(quint32 data, quint16 address, Log* log = nullptr, TransactionType type = read);
+    bool readWord(quint16 address, quint32& target, Log* log = nullptr);
+
     quint32 getavailablePM(){return availPMs;}
-    quint64 addressSpaceSize(){return sizeof(T0_Map);}
 
 public slots:
     void ChangeAvailablePMs(quint8 PMno){availPMs ^= (1 << PMno); /*qDebug() << QString::asprintf("0x%08X", availPMs);*/};
@@ -34,6 +38,12 @@ private:
                                          0x1900, 0x1B00, 0x1D00, 0x1F00,
                                          0x2100, 0x2300, 0x2500, 0x2700,
                                          0x2900};
+
+    //List of TCM addresses which are read only
+    QVector<quint16> readOnlyTCMList;
+    //List of PM addresses which are read only
+    QVector<quint16> readOnlyPMList;
+
     const QList<Mrand*> BoardTemperaturesList = {new Mrand(Mgaus,TCM_mean_T, 0.35, 0, 2),
                                                  new Mrand(Mgaus, PM_mean_T, 0.72, 0, 2), new Mrand(Mgaus, PM_mean_T, 0.72, 0, 2),
                                                  new Mrand(Mgaus, PM_mean_T, 0.72, 0, 2), new Mrand(Mgaus, PM_mean_T, 0.72, 0, 2),
@@ -90,6 +100,19 @@ private:
 
 private slots:
     void updateRegisters();
+
+    QString operationTypeString(TransactionType type){
+        switch (type){
+        case read:
+        case write:return "sequental";
+        case nonIncrementingRead:
+        case nonIncrementingWrite: return "non-incrementing";
+        case RMWbits:
+        case RMWsum: return "RMW operation";
+        case configurationRead:
+        case configurationWrite: return "";
+        }
+    }
 };
 
 #endif // FEE_H
