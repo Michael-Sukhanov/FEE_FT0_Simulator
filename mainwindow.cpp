@@ -6,6 +6,7 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    Serverlog.setSaveMode(ui->checkBox_Save->isChecked());;
     setWindowTitle(QCoreApplication::applicationName() + " v" + QCoreApplication::applicationVersion() + " alpha");
     QString green("background-color:rgb(127,233,127)"), red("background-color:rgb(234,65,85)");
     QList<QPushButton *> PM_select_list = ui->centralwidget->findChildren<QPushButton *>(QRegularExpression("pushButton_PM..."));

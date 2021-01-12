@@ -2,7 +2,6 @@
 #include <QDebug>
 
 
-
 Mrand::Mrand(Mdistribution type, quint32 mean, double sigma, quint32 min, quint32 max){
     max_minhandler(min,max);
     this->type = type;

@@ -9,22 +9,23 @@
 const quint32 TCM_mean_T = 0xEB, PM_mean_T = 397, TCM_FPGA_mean_T = 40186, PM_FPGA_mean_T = 40382,
               FPGA1V_mean = 21739, FPGA1_8V_mean = 39130; 
 
+const quint32 firstPMaddress = 0x200;
+
 class FEE:public QObject
 {
     Q_OBJECT
 public:
     FEE();
-    bool isFIFO(quint32 address);
-    bool isReadOnly(quint32 address);
-    bool isHalfed(quint32 address);
-    bool registerIsAvailable(quint32 address);
-    bool registerExists(quint32 address);
 
-    bool getValue(quint16 address, quint32& target, Log* log = nullptr, TransactionType type = read);
-    bool writeWord(quint32 data, quint16 address, Log* log = nullptr, TransactionType type = read);
-    bool readWord(quint16 address, quint32& target, Log* log = nullptr);
+    quint8 writeWord(quint16 address, quint32 data, Log* log = nullptr, TransactionType type = read);
+    quint8 readWord(quint16 address, quint32& target, Log* log = nullptr);
 
     quint32 getavailablePM(){return availPMs;}
+    qint8   getPmNo(quint32 address){if(isPM(address))
+                                         return address / firstPMaddress - 1;
+                                     else
+                                         return -1;}
+    void    setConnectedPMsMask(quint32 mask){ this->availPMs = mask;}
 
 public slots:
     void ChangeAvailablePMs(quint8 PMno){availPMs ^= (1 << PMno); /*qDebug() << QString::asprintf("0x%08X", availPMs);*/};
@@ -93,14 +94,13 @@ private:
                                                  new Mrand(Muniform, FPGA1_8V_mean, 0.2*FPGA1_8V_mean), new Mrand(Muniform, FPGA1_8V_mean, 0.2*FPGA1_8V_mean)
     };
     quint32 availPMs = 0;
-    QVector<quint16> nonavailableTCMregs, nonavailablePMregs, TCMReadOnlyregs, PMReadOnlyregs;
+    QVector<quint16> nonavailableTCMregs, nonavailablePMregs;
 
     void initTCMRegs();
     void initPMregs();
 
 private slots:
     void updateRegisters();
-
     QString operationTypeString(TransactionType type){
         switch (type){
         case read:
@@ -113,6 +113,17 @@ private slots:
         case configurationWrite: return "";
         }
     }
+
+    bool isPM(quint32 address);
+    bool isConnectedPM(quint8 pmNo);
+    bool isSPIEnabled(quint8 pmNo);
+    bool isFIFO(quint32 address);
+    bool isReadOnly(quint32 address);
+    bool is16bit(quint32 address);
+    bool registerIsAvailable(quint32 address);
+
+    bool setRegisterHard(quint32 address, quint32 value);
+
 };
 
 #endif // FEE_H

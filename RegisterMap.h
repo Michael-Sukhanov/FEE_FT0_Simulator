@@ -169,7 +169,9 @@ struct RegisterMap{
                 LASER_ON        : 1, //┘
                 LASER_PATTERN_1,     //]1C
                 LASER_PATTERN_0,     //]1D
-                reserved1[18];       //]1E-2F
+                SPI_MASK        :20,
+                                :12,
+                reserved1[17];       //]1F-2F
         HDMIlinkStatus PM_LINK_C[10];//]30-39
         quint32 CH_MASK_C       :10, //┐
                                 : 7, //│
@@ -245,6 +247,8 @@ struct RegisterMap{
         quint32 COUNTERS_FIFO_LOAD : 10, : 22;
         quint32 reserved7[254];
         TypePM  PM[20];
+        quint32 reserved8[5632];
+        quint32 NoNameZone[4096] = {0};
         quint32 &operator[] (quint16 address){
             return *(reinterpret_cast<quint32 *>(this) + address);
             }

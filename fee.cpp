@@ -7,84 +7,118 @@ FEE::FEE(){
    timer.start(1000);
 }
 
-bool FEE::registerExists(quint32 address){
-    return address <= sizeof(T0_Map) / 4 - 3;
-}
-
-bool FEE::getValue(quint16 address, quint32 &target, Log *log, TransactionType type){
-    if(registerExists(address)){
-        target = isFIFO(address) ? (this->T0_Map.getFIFOpointer(address)->isEmpty() ? 0 : this->T0_Map.getFIFOpointer(address)->head()) : ( registerIsAvailable(address) ? this->T0_Map[address] : QRandomGenerator::global()->generate() % 2 ? 0x0 : 0xFFFFFFFF);
-        return true;
-    }else{
-        if(log)log->sendMessage(QString::asprintf("getting value from non-existing 0x%08X (%s): forbidden", address, operationTypeString(type).toUtf8().data()), file);
-        return false;
-    }
-}
-
-bool FEE::writeWord(quint32 data, quint16 address, Log *log, TransactionType type){
-   if(registerExists(address) && !isReadOnly(address)){
-       if(type == nonIncrementingWrite){
-           if(isFIFO(address)) this->T0_Map.getFIFOpointer(address)->enqueue(data);
-           else{ T0_Map[address] = isHalfed(address) ? (0xFFFF & data) : data; data = T0_Map[address];} //getting value which we really wrote to register
-           if(log)log->sendMessage(QString::asprintf("writing 0x%08X to 0x%08X", data, address) + ((type==RMWbits || type == RMWsum) ? " (RMW operation)": ""), file);
-           return true;
-       }else{
-           if(isFIFO(address)){
-               if(log)log->sendMessage(QString::asprintf("writing 0x%08X to %s 0x%08X: forbidden", data, "FIFO" , address), file);
-               return false;
-           }else{
-               T0_Map[address] = isHalfed(address) ? (0xFFFF & data) : data;
-               if(log)log->sendMessage(QString::asprintf("writing 0x%08X to 0x%08X", T0_Map[address], address) + ((type==RMWbits || type == RMWsum) ? " (RMW operation)": ""), file);
-               return true;
-           }
-       }
-   }else{
-       if(log)log->sendMessage(QString::asprintf("writing 0x%08X to %s 0x%08X: forbidden", isHalfed(address) ? (0xFFFF & data) : data, isReadOnly(address) ? "read-only" : "non-existing" , address), file);
-       return false;
-   }
-}
-
-bool FEE::readWord(quint16 address, quint32 &target, Log *log){
-    if(registerExists(address)){
-        if(!registerIsAvailable(address)) this->T0_Map[address] = QRandomGenerator::global()->generate() % 2 ? 0x0 : 0xFFFFFFFF;
-        target =  isFIFO(address) ? (this->T0_Map.getFIFOpointer(address)->isEmpty() ? 0 : this->T0_Map.getFIFOpointer(address)->dequeue()) : this->T0_Map[address];
-        return true;
-    }else{
-        if(log)log->sendMessage(QString::asprintf("reading from %s 0x%08X: forbidden", "non-existing" , address), file);
-        return false;
-    }
-}
-
-//quint32 FEE::getValue(quint16 address){
-//    return isFIFO(address) ? (this->T0_Map.getFIFOpointer(address)->isEmpty() ? 0 : this->T0_Map.getFIFOpointer(address)->head()) : this->T0_Map[address];
-//}
-
-//void FEE::writeWord(quint32 data, quint16 address){
-//    if(isFIFO(address)) this->T0_Map.getFIFOpointer(address)->enqueue(data);
-//    else  this->T0_Map[address] = data;
-//}
-
-//quint32 FEE::read_word(quint16 address){
-//    if(!registerIsAvailable(address)) this->T0_Map[address] = QRandomGenerator::global()->generate() % 2 ? 0x0 : 0xFFFFFFFF;
-//    return isFIFO(address) ? (this->T0_Map.getFIFOpointer(address)->isEmpty() ? 0 : this->T0_Map.getFIFOpointer(address)->dequeue()) : this->T0_Map[address];
-//}
-
-
-
 bool FEE::registerIsAvailable(quint32 address){ //case when the register is not initialised
-    if(address < 0x200) return !nonavailableTCMregs.contains(address);
-    else{
-        if(availPMs & (1 << (address / 0x200 - 1))) return !nonavailablePMregs.contains(address - (address / 0x200) * 0x200);
-        else return false;
-    }
+    if(isPM(address)) return !nonavailablePMregs.contains(address % firstPMaddress);
+    else return !(
+                   nonavailableTCMregs.contains(address)          ||
+                  (address >= 0x102 && address <= 0x1FF)          ||
+                  (address > firstPMaddress && address <= 0x29FF && (address % firstPMaddress) >= 0x104) ||
+                  (address >= 0x5000) || (address >= 0x2A00 && address <= 0x3FFF)
+                );
 }
+
+//helping function while testing
+bool FEE::setRegisterHard(quint32 address, quint32 value){
+    if(!registerIsAvailable(address)) return false;
+    else this->T0_Map[address] = value;
+    return true;
+}
+
+
+quint8 FEE::writeWord(quint16 address, quint32 data, Log *log, TransactionType type){
+    bool itIsPM        = isPM(address),
+         itIsExists    = registerIsAvailable(address),
+         SPIok         = isSPIEnabled(getPmNo(address)),
+         itIsConnected = isConnectedPM(getPmNo(address)),
+         itIs16bits    = is16bit(address),
+         itIsReadonly  = isReadOnly(address);
+    QString logMessage;
+    quint8 InfoCode;
+    if(itIsPM){
+       if(SPIok){
+           if(itIsConnected){
+               if(itIsReadonly){
+                   logMessage = QString::asprintf("writing 0x%08X to read-only 0x%08X: forbidden", data, address);
+                   InfoCode = 0x5;
+               }else{
+                   this->T0_Map[address] = itIsExists ? (itIs16bits ? data % 0xFFFF : data) : 0xFFFFF;
+                   logMessage = QString::asprintf("writing 0x%08X to 0x%08X", data, address) + ((type == RMWbits || type == RMWsum) ? " (RMW operation)": "");
+                   InfoCode = 0x0;
+               }
+           }else{
+               logMessage = QString::asprintf("writing 0x%08X to 0x%08X", data, address) + ((type == RMWbits || type == RMWsum) ? " (RMW operation)": "");
+               InfoCode = 0x0;
+           }
+       }else{
+           logMessage = QString::asprintf("writing 0x%08X to SPI locked 0x%08X: forbidden", data, address);
+           InfoCode = 0x5;
+       }
+    }else{
+        if(itIsExists){
+            if(itIsReadonly){
+                logMessage = QString::asprintf("writing 0x%08X to read-only 0x%08X: forbidden", data, address);
+                InfoCode = 0x5;
+            }else{
+                this->T0_Map[address] = itIs16bits ? data % 0xFFFF : data;
+                logMessage = QString::asprintf("writing 0x%08X to 0x%08X", this->T0_Map[address], address) + ((type == RMWbits || type == RMWsum) ? "(RMW operation)": "");
+                InfoCode = 0x0;
+            }
+        }else{
+            logMessage = QString::asprintf("writing 0x%08X to non-existent 0x%08X: forbidden", data, address);
+            InfoCode = 0x7;
+        }
+
+    }
+    if(log) log->sendMessage(logMessage, file);
+    return InfoCode;
+}
+
+quint8 FEE::readWord(quint16 address, quint32 &target, Log *log){
+    if(isFIFO(address)){
+        target = this->T0_Map.getFIFOpointer(address)->isEmpty() ? 0 : this->T0_Map.getFIFOpointer(address)->dequeue();
+//        log->sendMessage(QString::asprintf("reading from 0x%08X (%s)", address, operationTypeString(type).toUtf8().data()));
+        return 0x0;
+    }
+    //getting all information about register
+    bool itIsPM        = isPM(address),
+         itIsExists    = registerIsAvailable(address),
+         SPIok         = isSPIEnabled(getPmNo(address)),
+         itIsConnected = isConnectedPM(getPmNo(address)),
+         itIs16bits    = is16bit(address);
+    QString logMessage;
+    quint8 InfoCode;
+    if(itIsPM){
+        if(SPIok){
+            if(itIsConnected)
+                target = itIsExists ? this->T0_Map[address] :  0xFFFF;
+            else
+                target = itIs16bits ? 0xFFFF : 0XFFFFFFFF;
+//            logMessage = QString::asprintf("reading from 0x%08X (%s)", address, operationTypeString(type).toUtf8().data());
+            InfoCode = 0x0;
+        }else{
+            logMessage = QString::asprintf("reading from 0x%08X: forbidden - SPI locked", address);
+            InfoCode = 0x4;
+        }
+    }else{
+        if(itIsExists){
+            target = this->T0_Map[address];
+//            logMessage = QString::asprintf("reading from 0x%08X (%s)", address, operationTypeString(type).toUtf8().data());
+            InfoCode = 0x0;
+        }else{
+            logMessage = QString::asprintf("reading from non-existent 0x%08X: forbidden", address);
+            InfoCode = 0x6;
+        }
+    }
+    if(log && !logMessage.isEmpty()) log->sendMessage(logMessage, file);
+    return InfoCode;
+    }
 
 
 void FEE::initTCMRegs(){
     //non-available regs
         nonavailableTCMregs.append(0x6);
-    for(quint8 i = 0; i < 18; ++i)
-        nonavailableTCMregs.append(0x1E + i);
+    for(quint8 i = 0; i < 17; ++i)
+        nonavailableTCMregs.append(0x1F + i);
     for(quint8 i = 0; i < 21; ++i)
         nonavailableTCMregs.append(0x3B + i);
     for(quint8 i = 0; i < 15; ++i)
@@ -93,17 +127,25 @@ void FEE::initTCMRegs(){
         nonavailableTCMregs.append(0x6B + i);
     for(quint8 i = 0; i < 89; ++i)
         nonavailableTCMregs.append(0x7F + i);
-    for(quint8 i = 0; i < 254; ++i)
-        nonavailableTCMregs.append(0x102 + i);
 
     //readonly regs
     readOnlyTCMList.append(0x5); //Temperature
     readOnlyTCMList.append(0x7); //Microcode & serial number
     for(quint8 i = 0; i < 10; ++i){ //PM Links
         readOnlyTCMList.append(0x10 + i);
-        readOnlyTCMList.append(0x30 + i);}
+        readOnlyTCMList.append(0x30 + i);
+    }
+    for(quint8 i = 0; i < 15; ++i)  //Counters
+        readOnlyTCMList.append(0x70 + i);
     for(quint8 i = 0; i < 16; ++i)  //GBTstatus
         readOnlyTCMList.append(0xE8 + i);
+    for(quint8 i = 0; i < 6 ; ++i) //FW and FIFO cnts
+        readOnlyTCMList.append(0xFC + i);
+    for(quint8 i = 0; i < 20; ++i){
+        quint8 k = 0;
+        while(k != 3)
+            readOnlyTCMList.append(0x300 + 0x200 * i + (k++));
+    }
 }
 
 void FEE::initPMregs(){
@@ -117,19 +159,17 @@ void FEE::initPMregs(){
     //readonly regs
     for(quint8 i = 0; i < 24; ++i) //ADC baselines
         readOnlyPMList.append(0xD + i);
-    readOnlyPMList.append(0x3E);   //TDC1 TDC2 Phase tuning
-    readOnlyPMList.append(0x3F);   //TDC3 Phase tuning
-    for(quint8 i = 0; i < 12; ++i)
-        readOnlyPMList.append(0x40 + i); //RAW TDC data
-    for(quint8 i = 0; i < 24; ++i){
-        readOnlyPMList.append(0x4C + i); //ADCs dispersion
-        readOnlyPMList.append(0xC0 + i); // CFD & TRG counters
-        readOnlyPMList.append(0x64 + i);} //Mean Amplitudes
+    for(quint8 i = 0; i < 62; ++i)
+        readOnlyPMList.append(0x3E + i);
     readOnlyPMList.append(0x7D); //Channel ADC baseline out of range
     readOnlyPMList.append(0xBC); //Board Temperature
     readOnlyPMList.append(0xBD); //Microcode & serial number
+    for(quint8 i = 0; i < 24; ++i)
+        readOnlyPMList.append(0xC0 + i);
     for(quint8 i = 0; i < 16; ++i)  //GBTstatus
         readOnlyPMList.append(0xE8 + i);
+    for(quint8 i = 0; i < 4; ++i)
+        readOnlyPMList.append(0xFC + i);
 }
 
 void FEE::updateRegisters(){
@@ -150,20 +190,33 @@ void FEE::updateRegisters(){
 
 }
 
+bool FEE::isPM(quint32 address){
+    return (address % firstPMaddress) < 0x100 && address > 0x1FF && address < 0x2A00;
+}
+
+bool FEE::isConnectedPM(quint8 pmNo){
+    return pmNo < 20 ? static_cast<bool>((1 << pmNo) & availPMs) : false;
+}
+
+bool FEE::isSPIEnabled(quint8 pmNo){
+    return pmNo < 20 ? static_cast<bool>((1 << pmNo) & this->T0_Map.SPI_MASK) : false;
+}
+
 bool FEE::isFIFO(quint32 address){
     return FIFOregslist.contains(address);
 }
 
 bool FEE::isReadOnly(quint32 address){
-    quint8 pmNo = address / 0x200;
-    if(pmNo) return readOnlyPMList.contains(address % 0x200);
-    else return readOnlyTCMList.contains(address);
+    if(isPM(address)) return readOnlyPMList.contains(address % firstPMaddress);
+    else return readOnlyTCMList.contains(address) || (address >= 0x4000 && address <= 0x4FFF);
 }
 
-bool FEE::isHalfed(quint32 address){
-    bool PM = address / 0x200;
-    return PM ? address % 0x200 < 0xC0 : address < 0xE;
+bool FEE::is16bit(quint32 address){
+    if(isPM(address)) return (address % firstPMaddress) <= 0xBF;
+    else return address <= 0xE;
 }
+
+
 
 
 
