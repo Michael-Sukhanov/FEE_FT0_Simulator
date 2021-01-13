@@ -25,14 +25,16 @@ public:
                                          return address / firstPMaddress - 1;
                                      else
                                          return -1;}
-    void    setConnectedPMsMask(quint32 mask){ this->availPMs = mask;}
+    void setConnectedPMsMask(quint32 mask){ this->availPMs = mask;}
 
 public slots:
+    void setReadonly(bool state){this->readonlyIsAvailable = !state;};
     void ChangeAvailablePMs(quint8 PMno){availPMs ^= (1 << PMno); /*qDebug() << QString::asprintf("0x%08X", availPMs);*/};
 
 private:
     QTimer timer;
     RegisterMap T0_Map;
+    bool readonlyIsAvailable = true;
     const QList<quint16> FIFOregslist = {0x0100, 0x0300, 0x0500, 0x0700,
                                          0x0900, 0x0B00, 0x0D00, 0x0F00,
                                          0x1100, 0x1300, 0x1500, 0x1700,
@@ -121,7 +123,7 @@ private slots:
     bool isReadOnly(quint32 address);
     bool is16bit(quint32 address);
     bool registerIsAvailable(quint32 address);
-
+    quint32 Correct(quint32 address, quint32 value);
     bool setRegisterHard(quint32 address, quint32 value);
 
 };

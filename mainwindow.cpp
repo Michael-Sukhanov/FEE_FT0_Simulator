@@ -14,6 +14,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(&IPbusServer, &Server::response_ready, this, &MainWindow::textEditshow);
     connect(this, &MainWindow::avail_PM_changed, &T0, &FEE::ChangeAvailablePMs);
     connect(ui->checkBox_Save, &QCheckBox::clicked, this, [=](bool state){Serverlog.setSaveMode(state);});
+    connect(ui->checkBox_READONLY_OFF, &QCheckBox::clicked, &T0, &FEE::setReadonly);
     connect(&IPbusServer, &Server::packet_recieved, this, [=](QHostAddress senderAddress, quint16 senderPort){
         ui->label_lastConnection->setText(QString::asprintf("Last request from: %s:%u", senderAddress.toString().toLocal8Bit().data(), senderPort));});
     connect(ui->pushButton_Bind, &QPushButton::clicked, this, [=](bool checked){

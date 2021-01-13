@@ -17,6 +17,27 @@ bool FEE::registerIsAvailable(quint32 address){ //case when the register is not 
                 );
 }
 
+quint32 FEE::Correct(quint32 address, quint32 value){
+    quint16 addressInPM = address % 0x200;
+    if(isPM(address) && addressInPM > 0x80 && addressInPM < 0xBB){
+        if(addressInPM <0xB0){
+            switch (addressInPM % 4) {
+            case 0:
+                return value > 300 ? (value < 30000 ? value : 30000) : 300;
+            case 1:
+            case 2:
+                return static_cast<qint16>(value) > -500 ? (static_cast<qint16>(value) < 500 ? value : 500) : static_cast<quint16>(-500);
+            case 3:
+                return value < 20000 ? value : 20000;
+            default:
+                return value;
+            }
+        }else
+             return value < 4000 ? value : 4000;
+    }else
+        return value;
+}
+
 //helping function while testing
 bool FEE::setRegisterHard(quint32 address, quint32 value){
     if(!registerIsAvailable(address)) return false;
@@ -31,18 +52,19 @@ quint8 FEE::writeWord(quint16 address, quint32 data, Log *log, TransactionType t
          SPIok         = isSPIEnabled(getPmNo(address)),
          itIsConnected = isConnectedPM(getPmNo(address)),
          itIs16bits    = is16bit(address),
+         itIsFIFO      = isFIFO(address),
          itIsReadonly  = isReadOnly(address);
     QString logMessage;
     quint8 InfoCode;
     if(itIsPM){
        if(SPIok){
            if(itIsConnected){
-               if(itIsReadonly){
+               if(itIsReadonly || itIsFIFO){
                    logMessage = QString::asprintf("writing 0x%08X to read-only 0x%08X: forbidden", data, address);
                    InfoCode = 0x5;
                }else{
-                   this->T0_Map[address] = itIsExists ? (itIs16bits ? data % 0xFFFF : data) : 0xFFFFF;
-                   logMessage = QString::asprintf("writing 0x%08X to 0x%08X", data, address) + ((type == RMWbits || type == RMWsum) ? " (RMW operation)": "");
+                   this->T0_Map[address] = itIsExists ? (itIs16bits ? Correct(address,data) % 0xFFFF : Correct(address,data)) : 0xFFFFF;
+                   logMessage = QString::asprintf("writing 0x%08X to 0x%08X", this->T0_Map[address], address) + ((type == RMWbits || type == RMWsum) ? " (RMW operation)": "");
                    InfoCode = 0x0;
                }
            }else{
@@ -55,7 +77,7 @@ quint8 FEE::writeWord(quint16 address, quint32 data, Log *log, TransactionType t
        }
     }else{
         if(itIsExists){
-            if(itIsReadonly){
+            if(itIsReadonly || itIsFIFO){
                 logMessage = QString::asprintf("writing 0x%08X to read-only 0x%08X: forbidden", data, address);
                 InfoCode = 0x5;
             }else{
@@ -116,7 +138,6 @@ quint8 FEE::readWord(quint16 address, quint32 &target, Log *log){
 
 void FEE::initTCMRegs(){
     //non-available regs
-        nonavailableTCMregs.append(0x6);
     for(quint8 i = 0; i < 17; ++i)
         nonavailableTCMregs.append(0x1F + i);
     for(quint8 i = 0; i < 21; ++i)
@@ -207,8 +228,9 @@ bool FEE::isFIFO(quint32 address){
 }
 
 bool FEE::isReadOnly(quint32 address){
-    if(isPM(address)) return readOnlyPMList.contains(address % firstPMaddress);
-    else return readOnlyTCMList.contains(address) || (address >= 0x4000 && address <= 0x4FFF);
+    if(isPM(address)) return readOnlyPMList.contains(address % firstPMaddress) && this->readonlyIsAvailable;
+    else return (readOnlyTCMList.contains(address) || (address >= 0x4000 && address <= 0x4FFF)) &&
+                this->readonlyIsAvailable;
 }
 
 bool FEE::is16bit(quint32 address){
