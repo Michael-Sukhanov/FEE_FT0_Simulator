@@ -89,7 +89,7 @@ IPbusPacket& IPbusPacket::PrepareControlResponse(FEE &targetmap){
                     handled_body_without_header[words_n_in_response] = ResponseTransaction.getTransactionInIPbusWords()[k];
                     ++words_n_in_response;
             }
-                ResponseTransaction.show_transaction();
+                //ResponseTransaction.show_transaction();
                 if(containErrors) break;//interruping packet handle
         }
         IPbusPacket *response = new IPbusPacket(handled_body_without_header, words_n_in_response, this->output);
