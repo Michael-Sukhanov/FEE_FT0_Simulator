@@ -158,7 +158,7 @@ void FEE::initTCMRegs(){
     }
     for(quint8 i = 0; i < 15; ++i)  //Counters
         readOnlyTCMList.append(0x70 + i);
-    for(quint8 i = 0; i < 16; ++i)  //GBTstatus
+    for(quint8 i = 0; i < 8; ++i)  //GBTstatus
         readOnlyTCMList.append(0xE8 + i);
     for(quint8 i = 0; i < 6 ; ++i) //FW and FIFO cnts
         readOnlyTCMList.append(0xFC + i);
