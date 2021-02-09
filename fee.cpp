@@ -171,7 +171,6 @@ void FEE::initTCMRegs(){
 
 void FEE::initPMregs(){
     //non-available regs
-    nonavailablePMregs.append(0x7E);
     nonavailablePMregs.append(0xBE);
     nonavailablePMregs.append(0xBF);
     for(quint8 i = 0; i < 253; ++i)
@@ -187,7 +186,7 @@ void FEE::initPMregs(){
     readOnlyPMList.append(0xBD); //Microcode & serial number
     for(quint8 i = 0; i < 24; ++i)
         readOnlyPMList.append(0xC0 + i);
-    for(quint8 i = 0; i < 16; ++i)  //GBTstatus
+    for(quint8 i = 0; i < 8; ++i)  //GBTstatus
         readOnlyPMList.append(0xE8 + i);
     for(quint8 i = 0; i < 4; ++i)
         readOnlyPMList.append(0xFC + i);
