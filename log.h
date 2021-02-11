@@ -17,8 +17,15 @@ public:
         const QString logFileName = "Logs/" + QCoreApplication::applicationName() + '_' + QDate::currentDate().toString("yyyy-MM-dd") + ".log");
     void sendMessage(const QString message, OutputDevice device = console);
     ~Log();
+    void openLogFile();
+    void closeLogFile();
 public slots:
-    void setSaveMode(bool saveMode){this->saveToFile = saveMode;}
+    void setSaveMode(bool saveMode){
+        if (this->saveToFile != saveMode) {
+            this->saveToFile = saveMode;
+            saveMode ? openLogFile() : closeLogFile();
+        }
+    }
 
 signals:
     void LogMessage(QString);
