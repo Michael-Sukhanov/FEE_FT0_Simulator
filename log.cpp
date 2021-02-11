@@ -9,6 +9,7 @@ Log::Log(const bool createlogfile, const QString caller_name, const QString logF
 }
 
 void Log::openLogFile() {
+    logfile.setFileName("Logs/" + QCoreApplication::applicationName() + '_' + QDate::currentDate().toString("yyyy-MM-dd") + ".log");
     if (!logfile.open(QFile::WriteOnly | QIODevice::Append | QFile::Text))
         this->sendMessage("Can't open log file: " + logfile.fileName(), console);
     else
